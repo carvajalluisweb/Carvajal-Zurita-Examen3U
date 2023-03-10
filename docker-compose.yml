@@ -1,0 +1,96 @@
+version: '2'
+
+services:
+
+  kong-database:
+    image: postgres:latest
+    hostname: kong-database
+    container_name: kong-database
+    environment:
+      POSTGRES_USER: "kong"
+      POSTGRES_DB: "kong"
+      POSTGRES_PASSWORD: "kong"
+    ports:
+      - "5432:5432"
+
+  kong-bootstrap:
+    image: kong:3.1.1-alpine
+    hostname: kong
+    container_name: kong-bootstrap
+    depends_on:
+      - kong-database
+    environment:
+      KONG_DATABASE: "postgres"
+      KONG_PG_HOST: "kong-database"
+      KONG_PG_DATABASE: "kong"
+      KONG_PG_USER: "kong"
+      KONG_PG_PASSWORD: "kong"
+    command: "kong migrations bootstrap"
+    restart: "on-failure"
+
+  kong:
+    image: kong:3.1.1-alpine
+    hostname: kong
+    container_name: kong
+    restart: always
+    depends_on:
+      - kong-bootstrap
+    environment:
+      KONG_DATABASE: "postgres"
+      KONG_PG_HOST: "kong-database"
+      KONG_PG_DATABASE: "kong"
+      KONG_PG_USER: "kong"
+      KONG_PG_PASSWORD: "kong"
+      KONG_PROXY_ACCESS_LOG: /dev/stdout
+      KONG_ADMIN_ACCESS_LOG: /dev/stdout
+      KONG_PROXY_ERROR_LOG: /dev/stdout
+      KONG_ADMIN_ERROR_LOG: /dev/stdout
+      KONG_ADMIN_LISTEN: "0.0.0.0:8001, 0.0.0.0:8444 ssl"
+    command: "kong start"
+    ports:
+      - "8000:8000"
+      - "8443:8443"
+      - "8001:8001"
+      - "8444:8444"
+
+  products-accounts:
+    build:
+      context: ./products-accounts
+    container_name: products-accounts
+    hostname: products-accounts
+    depends_on:
+      - postgres
+
+  branches:
+    build:
+      context: ./branches
+    container_name: branches
+    hostname: branches
+    depends_on:
+      - mongo
+
+  postgres:
+    image: postgres:latest
+    hostname: postgres-banquito
+    container_name: postgres-banquito
+    environment:
+      - POSTGRES_USER=admin
+      - POSTGRES_PASSWORD=admin123
+      - POSTGRES_DB=products_accounts
+    volumes:
+      - ./postgres-init/init.sql:/docker-entrypoint-initdb.d/init.sql
+
+  mongo:
+    image: mongo:latest
+    hostname: mongo-banquito
+    container_name: mongo-banquito
+    environment:
+      - MONGO_INITDB_ROOT_USERNAME=admin
+      - MONGO_INITDB_ROOT_PASSWORD=admin123
+      - MONGO_INITDB_DATABASE=branche
+    volumes:
+      - ./mongo-init/init.js:/docker-entrypoint-initdb.d/init.js
+
+networks:
+  default:
+    name: kong-net
